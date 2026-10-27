@@ -6,6 +6,9 @@ currently in a state of testing how docker-java works
 
 Planned stack: Spring Boot 4, Java 21, Spring Security, PostgreSQL, Flyway, Spring AMQP, docker-java (to start the docker containers from java), JUnit and TestContainers
 
+Planned architecture:
+![architecture-diagram.png](docs/architecture-diagram.png)
+
 Rough scope and plan:
 I want to develop it using microservices architecture and RabbitMQ message broker. The app is going to be split between two microservices (which will communicate through the broker both ways):
 - Submission service which will be responsible for taking users code for "a programming task" and publishing the code with the test cases (inputs and expected outputs) inside a single message to RabbitMQ (say `judge.requests` queue). This service will also have JWT auth for the users, a single Postgres database (the only db in this project in fact) and a consumer for messages with test results coming back from the second service.
