@@ -4,10 +4,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
-import com.github.dockerjava.api.model.Capability;
-import com.github.dockerjava.api.model.Frame;
-import com.github.dockerjava.api.model.HostConfig;
-import com.github.dockerjava.api.model.Ulimit;
+import com.github.dockerjava.api.model.*;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientConfig;
 import com.github.dockerjava.core.DockerClientImpl;
@@ -22,11 +19,11 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 public class SandboxRunner {
+
+    private final int MAX_OUTPUT_BYTES = 256 * 1024;
 
     private DockerClientConfig config;
     private DockerHttpClient httpClient;
@@ -69,8 +66,6 @@ public class SandboxRunner {
                 .withReadonlyRootfs(true)
                 .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,nodev,size=" + 32 + "m"));
 
-        String className = getClassNameFromSourceCode(javaSourceCode);
-
         int containerTimeoutSeconds = 15;
         int compileTimeoutSeconds = 5;
         int runCodePerTestTimeoutSeconds = 3;
@@ -89,8 +84,8 @@ public class SandboxRunner {
         try {
             // Compile the script
 
-            String compileCodeCommand = String.format("echo \"$CODE_B64\" | base64 -d > /tmp/%s.java && " +
-                    "javac -d /tmp /tmp/%s.java", className, className);
+            String compileCodeCommand = "echo \"$CODE_B64\" | base64 -d > /tmp/Main.java && " +
+                    "javac -d /tmp /tmp/Main.java";
 
             ExecCreateCmdResponse compileExec = dockerClient.execCreateCmd(containerId)
                     .withAttachStderr(true)
@@ -98,10 +93,10 @@ public class SandboxRunner {
                     .withCmd("/bin/sh", "-c", compileCodeCommand)
                     .exec();
 
-            String compileLogs = runExecAndGetLogs(compileExec.getId(), 5);
+            ExecResult compileExecResult = runExecAndGetLogs(compileExec.getId(), 5);
 
-            if (!compileLogs.isBlank()) {
-                log.error("Compilation error:\n{}", compileLogs);
+            if (!compileExecResult.stderr().isBlank() || compileExecResult.exitCode() != 0) {
+                log.error("Compilation error:\n{}", compileExecResult.stderr());
                 return;
             }
 
@@ -109,7 +104,7 @@ public class SandboxRunner {
 
             String inputB64 = Base64.getEncoder().encodeToString("10\n".getBytes());
 
-            String runCodeCommand = String.format("echo \"%s\" | base64 -d | java -XX:MaxRAMPercentage=80.0 -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp %s", inputB64, className);
+            String runCodeCommand = String.format("echo \"%s\" | base64 -d | java -XX:MaxRAMPercentage=80.0 -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", inputB64);
 
             ExecCreateCmdResponse execRunCode = dockerClient.execCreateCmd(containerId)
                     .withAttachStdout(true)
@@ -117,8 +112,13 @@ public class SandboxRunner {
                     .withCmd("/bin/sh", "-c", runCodeCommand)
                     .exec();
 
-            String runLogs = runExecAndGetLogs(execRunCode.getId(), 3);
-            System.out.println("Output:\n" + runLogs);
+            ExecResult runExecResult = runExecAndGetLogs(execRunCode.getId(), 3);
+
+            if (runExecResult.exitCode() != 0) {
+                System.out.println("Runtime error:\n" + runExecResult.stderr());
+            } else {
+                System.out.println("Output:\n" + runExecResult.stdout());
+            }
         } finally {
             try {
                 dockerClient.removeContainerCmd(containerId)
@@ -129,27 +129,30 @@ public class SandboxRunner {
         }
     }
 
-    private String getClassNameFromSourceCode(String javaSourceCode) {
-        String className = "Main";
-        Pattern pattern = Pattern.compile("public\\s+class\\s+([A-Za-z0-9_]+)");
-        Matcher matcher = pattern.matcher(javaSourceCode);
-        if (matcher.find()) {
-            className = matcher.group(1);
+    private void writeWithBound(ByteArrayOutputStream stream, byte[] value) {
+        if (stream.size() < MAX_OUTPUT_BYTES) {
+            stream.write(value, 0, Math.min(value.length, MAX_OUTPUT_BYTES - stream.size()));
         }
-        return className;
     }
 
-    private String runExecAndGetLogs(String execId, int timeoutSeconds) {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream(256 * 1024);
+    private ExecResult runExecAndGetLogs(String execId, int timeoutSeconds) {
+        ByteArrayOutputStream stdoutOutputStream = new ByteArrayOutputStream(MAX_OUTPUT_BYTES);
+        ByteArrayOutputStream stderrOutputStream = new ByteArrayOutputStream(MAX_OUTPUT_BYTES);
 
         try {
             dockerClient.execStartCmd(execId)
                     .exec(new ResultCallback.Adapter<Frame>() {
                         @Override
                         public void onNext(Frame frame) {
-                            System.out.println(frame);
                             try {
-                                outputStream.write(frame.getPayload());
+                                byte[] payload = frame.getPayload();
+                                if (payload == null) return;
+
+                                if (frame.getStreamType() == StreamType.STDOUT) {
+                                    writeWithBound(stdoutOutputStream, payload);
+                                } else if (frame.getStreamType() == StreamType.STDERR) {
+                                    writeWithBound(stderrOutputStream, payload);
+                                }
                             } catch (Exception ignored) {}
                         }
                     })
@@ -158,6 +161,8 @@ public class SandboxRunner {
             Thread.currentThread().interrupt();
         }
 
-        return outputStream.toString();
+        long exitCode = dockerClient.inspectExecCmd(execId).exec().getExitCodeLong();
+
+        return new ExecResult(exitCode, stdoutOutputStream.toString(), stderrOutputStream.toString());
     }
 }

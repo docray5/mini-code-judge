@@ -17,3 +17,6 @@ I want to develop it using microservices architecture and RabbitMQ message broke
 design decisions:
 - No api gateway, since only the submission service will have endpoints
 - Java will be the only supported language for now
+
+Known limitations:
+- class name of submitted code must be Main (this can be fixed tho with regex searching the file for class name)

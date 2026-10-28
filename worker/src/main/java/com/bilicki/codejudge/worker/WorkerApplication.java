@@ -13,7 +13,7 @@ public class WorkerApplication {
 		sandboxRunner.executeJavaCode("""
 				import java.util.Scanner;
 				
-				public class FibonacciExample {
+				public class Main {
 				
 				    public static void printFibonacciSeries(int count) {
 				        int firstTerm = 0;
