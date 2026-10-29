@@ -79,9 +79,9 @@ public class SandboxRunner {
 
         String containerId = containerResponse.getId();
 
-        dockerClient.startContainerCmd(containerId).exec();
-
         try {
+            dockerClient.startContainerCmd(containerId).exec();
+
             // Compile the script
 
             String compileCodeCommand = "echo \"$CODE_B64\" | base64 -d > /tmp/Main.java && " +
@@ -95,7 +95,7 @@ public class SandboxRunner {
 
             ExecResult compileExecResult = runExecAndGetLogs(compileExec.getId(), 5);
 
-            if (!compileExecResult.stderr().isBlank() || compileExecResult.exitCode() != 0) {
+            if (compileExecResult.exitCode() != 0) {
                 log.error("Compilation error:\n{}", compileExecResult.stderr());
                 return;
             }
@@ -136,8 +136,8 @@ public class SandboxRunner {
     }
 
     private ExecResult runExecAndGetLogs(String execId, int timeoutSeconds) {
-        ByteArrayOutputStream stdoutOutputStream = new ByteArrayOutputStream(MAX_OUTPUT_BYTES);
-        ByteArrayOutputStream stderrOutputStream = new ByteArrayOutputStream(MAX_OUTPUT_BYTES);
+        ByteArrayOutputStream stdoutOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderrOutputStream = new ByteArrayOutputStream();
 
         try {
             dockerClient.execStartCmd(execId)
@@ -161,7 +161,8 @@ public class SandboxRunner {
             Thread.currentThread().interrupt();
         }
 
-        long exitCode = dockerClient.inspectExecCmd(execId).exec().getExitCodeLong();
+        Long exitCodeObj = dockerClient.inspectExecCmd(execId).exec().getExitCodeLong();
+        long exitCode = (exitCodeObj != null) ? exitCodeObj : -1L;
 
         return new ExecResult(exitCode, stdoutOutputStream.toString(), stderrOutputStream.toString());
     }
