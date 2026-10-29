@@ -2,14 +2,19 @@ package com.bilicki.codejudge.worker;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.context.ConfigurableApplicationContext;
 
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class WorkerApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(WorkerApplication.class, args);
+		// temporary so that everything gets managed by spring boot
 
-		SandboxRunner sandboxRunner = new SandboxRunner();
+		ConfigurableApplicationContext context = SpringApplication.run(WorkerApplication.class, args);
+
+		SandboxRunner sandboxRunner = context.getBean(SandboxRunner.class);
 		sandboxRunner.executeJavaCode("""
 				import java.util.Scanner;
 				
@@ -39,7 +44,7 @@ public class WorkerApplication {
 				    }
 				}
 				
-				""");
+				""", 3);
 	}
 
 }

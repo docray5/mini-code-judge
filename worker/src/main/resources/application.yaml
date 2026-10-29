@@ -1,3 +1,19 @@
 spring:
   application:
     name: worker
+
+sandbox:
+  docker-host: ${DOCKER_HOST_URI:unix:///var/run/docker.sock}
+  image: java-sandbox:21
+  user: "65534:65534"
+  label-key: "app.codejudge.sandbox"
+  label-value: "true"
+  cpus: 0.5
+  memory-mb: 128
+  pids-limit: 32
+  number-of-files-limit: 64
+  tmpfs-mb: 32
+  heap-percentage: 80.0
+  compile-timeout: 5s
+  container-lifetime: 30s
+  max-output-bytes: 65536

@@ -1,80 +1,56 @@
 package com.bilicki.codejudge.worker;
 
+import com.bilicki.codejudge.worker.sandbox.SandboxProperties;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.model.*;
-import com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.dockerjava.core.DockerClientConfig;
-import com.github.dockerjava.core.DockerClientImpl;
-import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
-import com.github.dockerjava.transport.DockerHttpClient;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
+@RequiredArgsConstructor
+@Component
 public class SandboxRunner {
 
-    private final int MAX_OUTPUT_BYTES = 256 * 1024;
+    private final DockerClient dockerClient;
+    private final SandboxProperties properties;
 
-    private DockerClientConfig config;
-    private DockerHttpClient httpClient;
-    private DockerClient dockerClient;
-
-    public SandboxRunner() {
-        config = new DefaultDockerClientConfig.Builder()
-                .withDockerHost("unix:///var/run/docker.sock")
-                .build();
-        httpClient = new ApacheDockerHttpClient.Builder()
-                .dockerHost(config.getDockerHost())
-                .sslConfig(config.getSSLConfig())
-                .maxConnections(100)
-                .connectionTimeout(Duration.ofSeconds(30))
-                .responseTimeout(Duration.ofSeconds(30))
-                .build();
-
-        dockerClient = DockerClientImpl.getInstance(config, httpClient);
-    }
-
-    public void executeJavaCode(String javaSourceCode) {
+    public void executeJavaCode(String javaSourceCode, int runTestTimeoutSeconds) {
         // setup and start container
         String base64Code = Base64.getEncoder().encodeToString(javaSourceCode.getBytes(StandardCharsets.UTF_8));
 
-        long memoryBytes = 128 * 1024 * 1024;
-        long nanoCpus = (long) (0.5f * 1_000_000_000L);
+        long memoryBytes = properties.memoryMb() * 1024 * 1024;
+        long nanoCpus = (long) (properties.cpus() * 1_000_000_000L);
 
-        // run this command essentially:
-        // docker run -it --rm --user 65534:65534 --cpus 0.5 --memory=128m --memory-swap=128m --pids-limit=32 --network none --cap-drop=ALL --security-opt no-new-privileges:true --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m --ipc=none --ulimit nofile=64:64 --name java-sandbox-test java-sandbox:21 /bin/sh
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNanoCPUs(nanoCpus)
                 .withMemory(memoryBytes)
                 .withMemorySwap(memoryBytes)
-                .withPidsLimit(32L)
-                .withUlimits(List.of(new Ulimit("nofile", 64L, 64L)))
+                .withPidsLimit(properties.pidsLimit())
+                .withUlimits(List.of(new Ulimit("nofile", properties.numberOfFilesLimit(), properties.numberOfFilesLimit())))
                 .withNetworkMode("none")
                 .withIpcMode("none")
                 .withCapDrop(Capability.ALL)
                 .withSecurityOpts(List.of("no-new-privileges:true"))
                 .withReadonlyRootfs(true)
-                .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,nodev,size=" + 32 + "m"));
+                .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,nodev,size=" + properties.tmpfsMb() + "m"));
 
-        int containerTimeoutSeconds = 15;
-        int compileTimeoutSeconds = 5;
-        int runCodePerTestTimeoutSeconds = 3;
-
-        CreateContainerResponse containerResponse = dockerClient.createContainerCmd("java-sandbox:21")
-                .withUser("65534:65534")
+        CreateContainerResponse containerResponse = dockerClient.createContainerCmd(properties.image())
+                .withLabels(Map.of(properties.labelKey(), properties.labelValue()))
+                .withUser(properties.user())
                 .withHostConfig(hostConfig)
                 .withEnv("CODE_B64=" + base64Code)
-                .withCmd("/bin/sh", "-c", "sleep " + containerTimeoutSeconds)
+                .withCmd("/bin/sh", "-c", "sleep " + properties.containerLifetime().toSeconds())
                 .exec();
 
         String containerId = containerResponse.getId();
@@ -93,7 +69,7 @@ public class SandboxRunner {
                     .withCmd("/bin/sh", "-c", compileCodeCommand)
                     .exec();
 
-            ExecResult compileExecResult = runExecAndGetLogs(compileExec.getId(), 5);
+            ExecResult compileExecResult = runExecAndGetLogs(compileExec.getId(), (int) properties.compileTimeout().toSeconds());
 
             if (compileExecResult.exitCode() != 0) {
                 log.error("Compilation error:\n{}", compileExecResult.stderr());
@@ -104,7 +80,7 @@ public class SandboxRunner {
 
             String inputB64 = Base64.getEncoder().encodeToString("10\n".getBytes());
 
-            String runCodeCommand = String.format("echo \"%s\" | base64 -d | java -XX:MaxRAMPercentage=80.0 -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", inputB64);
+            String runCodeCommand = String.format("echo \"%s\" | base64 -d | java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", inputB64, properties.heapPercentage());
 
             ExecCreateCmdResponse execRunCode = dockerClient.execCreateCmd(containerId)
                     .withAttachStdout(true)
@@ -112,7 +88,7 @@ public class SandboxRunner {
                     .withCmd("/bin/sh", "-c", runCodeCommand)
                     .exec();
 
-            ExecResult runExecResult = runExecAndGetLogs(execRunCode.getId(), 3);
+            ExecResult runExecResult = runExecAndGetLogs(execRunCode.getId(), runTestTimeoutSeconds);
 
             if (runExecResult.exitCode() != 0) {
                 System.out.println("Runtime error:\n" + runExecResult.stderr());
@@ -130,8 +106,8 @@ public class SandboxRunner {
     }
 
     private void writeWithBound(ByteArrayOutputStream stream, byte[] value) {
-        if (stream.size() < MAX_OUTPUT_BYTES) {
-            stream.write(value, 0, Math.min(value.length, MAX_OUTPUT_BYTES - stream.size()));
+        if (stream.size() < properties.maxOutputBytes()) {
+            stream.write(value, 0, Math.min(value.length, properties.maxOutputBytes() - stream.size()));
         }
     }
 
