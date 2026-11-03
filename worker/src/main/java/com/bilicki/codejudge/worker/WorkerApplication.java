@@ -54,7 +54,8 @@ public class WorkerApplication {
 
 
 			RunTestResult result = sandboxSession.runTest("10", 3);
-			System.out.println("Fibonacci test duration: " + result.durationMs());
+			System.out.println("Fibonacci test duration:");
+			System.out.println(result);
 		} catch (Exception e) {
 			System.out.println(e);
 		}
@@ -76,6 +77,7 @@ public class WorkerApplication {
 
 			RunTestResult result = sandboxSession.runTest("", 3);
 			System.out.println("oom exception test duration: " + result.durationMs());
+			System.out.println(result);
 		} catch (Exception e) {
 			System.out.println(e);
 		}
@@ -97,7 +99,8 @@ public class WorkerApplication {
 			}""");
 
 			RunTestResult result = sandboxSession.runTest("", 3);
-			System.out.println("timed out exception test duration: " + result.durationMs());
+			System.out.println("timed out exception test:");
+			System.out.println(result);
 		} catch (Exception e) {
 			System.out.println(e);
 		}
@@ -115,7 +118,8 @@ public class WorkerApplication {
 			}""");
 
 			RunTestResult result = sandboxSession.runTest("", 3);
-			System.out.println("output exceeded test duration: " + result.durationMs());
+			System.out.println("output exceeded test duration:");
+			System.out.println(result);
 		} catch (Exception e) {
 			System.out.println(e);
 		}

@@ -39,9 +39,11 @@ public class SandboxSessionImpl implements SandboxSession {
     public CompileResult compile(String javaSourceCode) {
         String base64Code = Base64.getEncoder().encodeToString(javaSourceCode.getBytes(StandardCharsets.UTF_8));
 
-        String compileCodeCommand = "echo \"$CODE_B64\" | base64 -d > /tmp/Main.java && javac -d /tmp /tmp/Main.java";
+        int compileTimeoutSeconds = (int) properties.compileTimeout().toSeconds();
 
-        ExecResult result = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), (int) properties.compileTimeout().toSeconds());
+        String compileCodeCommand = String.format("echo \"$CODE_B64\" | base64 -d > /tmp/Main.java && timeout -k 1s %ds javac -d /tmp /tmp/Main.java", compileTimeoutSeconds);
+
+        ExecResult result = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), compileTimeoutSeconds);
 
         // TODO remove this later (it needs to be logged in the class calling this method)
         if (result.exitCode() != 0) {
@@ -55,7 +57,7 @@ public class SandboxSessionImpl implements SandboxSession {
     public RunTestResult runTest(String stdin, int runTestTimeoutSeconds) {
         String inputB64 = Base64.getEncoder().encodeToString(stdin.getBytes());
 
-        String runCodeCommand = String.format(Locale.US, "echo \"$STDIN_B64\" | base64 -d | java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", properties.heapPercentage());
+        String runCodeCommand = String.format(Locale.US, "echo \"$STDIN_B64\" | base64 -d | timeout -k 1s %ds java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", runTestTimeoutSeconds, properties.heapPercentage());
 
         ExecResult result = executeCmd(runCodeCommand, List.of("STDIN_B64=" + inputB64), runTestTimeoutSeconds);
 
@@ -68,7 +70,7 @@ public class SandboxSessionImpl implements SandboxSession {
 
         return new RunTestResult(
                 result.exitCode(), result.stdout, result.stderr,
-                !result.timedOut, result.outputLimitExceeded, result.oomKilled, result.durationMs
+                result.timedOut, result.outputLimitExceeded, result.oomKilled, result.durationMs
         );
     }
 
@@ -80,13 +82,17 @@ public class SandboxSessionImpl implements SandboxSession {
                 .exec();
     }
 
-    /** @return true when bytes were written properly, otherwise false */
+    /** @return true when bytes were written properly within limit, otherwise false */
     private boolean writeWithBound(ByteArrayOutputStream stream, byte[] value) {
-        if (stream.size() < properties.maxOutputBytes()) {
-            stream.write(value, 0, Math.min(value.length, properties.maxOutputBytes() - stream.size()));
-            return true;
+        int remaining = properties.maxOutputBytes() - stream.size();
+        if (value.length > remaining) {
+            if (remaining > 0) {
+                stream.write(value, 0, remaining);
+            }
+            return false;
         }
-        return false;
+        stream.write(value, 0, value.length);
+        return true;
     }
 
     private ExecResult executeCmd(String command, List<String> env, int timeoutSeconds) {
@@ -128,7 +134,7 @@ public class SandboxSessionImpl implements SandboxSession {
             log.error("Stream closed early or failed: {}", e.getMessage());
         }
 
-        long durationMs = TimeUnit.MILLISECONDS.toMillis(System.nanoTime() - startNanos);
+        long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
 
         Long exitCodeObj = dockerClient.inspectExecCmd(exec.getId()).exec().getExitCodeLong();
         long exitCode = (exitCodeObj != null) ? exitCodeObj : -1L;
