@@ -3,16 +3,20 @@ package com.bilicki.codejudge.worker.sandbox;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
+import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.StreamType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -24,7 +28,11 @@ public class SandboxSessionImpl implements SandboxSession {
     private record ExecResult(
             long exitCode,
             String stdout,
-            String stderr
+            String stderr,
+            boolean timedOut,
+            boolean outputLimitExceeded,
+            boolean oomKilled,
+            long durationMs
     ) { }
 
     @Override
@@ -33,44 +41,52 @@ public class SandboxSessionImpl implements SandboxSession {
 
         String compileCodeCommand = "echo \"$CODE_B64\" | base64 -d > /tmp/Main.java && javac -d /tmp /tmp/Main.java";
 
-        ExecResult compileExecResult = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), (int) properties.compileTimeout().toSeconds());
+        ExecResult result = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), (int) properties.compileTimeout().toSeconds());
 
-        if (compileExecResult.exitCode() != 0) {
-            log.error("Compilation error:\n{}", compileExecResult.stderr());
+        // TODO remove this later (it needs to be logged in the class calling this method)
+        if (result.exitCode() != 0) {
+            log.error("Compilation error:\n{}", result.stderr());
         }
 
-        return new CompileResult();
+        return new CompileResult(!result.timedOut && result.exitCode == 0, result.timedOut, result.stderr);
     }
 
     @Override
     public RunTestResult runTest(String stdin, int runTestTimeoutSeconds) {
         String inputB64 = Base64.getEncoder().encodeToString(stdin.getBytes());
 
-        String runCodeCommand = String.format("echo \"%s\" | base64 -d | java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", inputB64, properties.heapPercentage());
+        String runCodeCommand = String.format(Locale.US, "echo \"$STDIN_B64\" | base64 -d | java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", properties.heapPercentage());
 
-        ExecResult runExecResult = executeCmd(runCodeCommand, List.of(), runTestTimeoutSeconds);
+        ExecResult result = executeCmd(runCodeCommand, List.of("STDIN_B64=" + inputB64), runTestTimeoutSeconds);
 
-        if (runExecResult.exitCode() != 0) {
-            System.out.println("Runtime error:\n" + runExecResult.stderr());
+        // TODO remove this later (it needs to be logged in the class calling this method)
+        if (result.exitCode() != 0) {
+            System.out.println("Runtime error:\n" + result.stderr());
         } else {
-            System.out.println("Output:\n" + runExecResult.stdout());
+            System.out.println("Output:\n" + result.stdout());
         }
 
-        return new RunTestResult();
+        return new RunTestResult(
+                result.exitCode(), result.stdout, result.stderr,
+                !result.timedOut, result.outputLimitExceeded, result.oomKilled, result.durationMs
+        );
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         dockerClient.removeContainerCmd(containerId)
                 .withForce(true)
                 .withRemoveVolumes(true)
                 .exec();
     }
 
-    private void writeWithBound(ByteArrayOutputStream stream, byte[] value) {
+    /** @return true when bytes were written properly, otherwise false */
+    private boolean writeWithBound(ByteArrayOutputStream stream, byte[] value) {
         if (stream.size() < properties.maxOutputBytes()) {
             stream.write(value, 0, Math.min(value.length, properties.maxOutputBytes() - stream.size()));
+            return true;
         }
+        return false;
     }
 
     private ExecResult executeCmd(String command, List<String> env, int timeoutSeconds) {
@@ -84,31 +100,52 @@ public class SandboxSessionImpl implements SandboxSession {
         ByteArrayOutputStream stdoutOutputStream = new ByteArrayOutputStream();
         ByteArrayOutputStream stderrOutputStream = new ByteArrayOutputStream();
 
-        try {
-            dockerClient.execStartCmd(exec.getId())
-                    .exec(new ResultCallback.Adapter<Frame>() {
-                        @Override
-                        public void onNext(Frame frame) {
-                            try {
-                                byte[] payload = frame.getPayload();
-                                if (payload == null) return;
+        AtomicBoolean outputExceeded = new AtomicBoolean(false);
+        long startNanos = System.nanoTime();
+        boolean completedInTime = false;
 
-                                if (frame.getStreamType() == StreamType.STDOUT) {
-                                    writeWithBound(stdoutOutputStream, payload);
-                                } else if (frame.getStreamType() == StreamType.STDERR) {
-                                    writeWithBound(stderrOutputStream, payload);
-                                }
-                            } catch (Exception ignored) {}
-                        }
-                    })
-                    .awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
+        try (ResultCallback.Adapter<Frame> callback = new ResultCallback.Adapter<>() {
+            @Override
+            public void onNext(Frame frame) {
+                byte[] payload = frame.getPayload();
+                if (payload == null) return;
+
+                if (frame.getStreamType() == StreamType.STDOUT) {
+                    if (!writeWithBound(stdoutOutputStream, payload)) {
+                        outputExceeded.set(true);
+                    }
+                } else if (frame.getStreamType() == StreamType.STDERR) {
+                    writeWithBound(stderrOutputStream, payload);
+                }
+            }
+        }) {
+            completedInTime = dockerClient.execStartCmd(exec.getId())
+                    .exec(callback)
+                    .awaitCompletion(timeoutSeconds + 2L, TimeUnit.SECONDS);
+        } catch (InterruptedException | IOException e) {
             Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.error("Stream closed early or failed: {}", e.getMessage());
         }
+
+        long durationMs = TimeUnit.MILLISECONDS.toMillis(System.nanoTime() - startNanos);
 
         Long exitCodeObj = dockerClient.inspectExecCmd(exec.getId()).exec().getExitCodeLong();
         long exitCode = (exitCodeObj != null) ? exitCodeObj : -1L;
 
-        return new ExecResult(exitCode, stdoutOutputStream.toString(), stderrOutputStream.toString());
+        InspectContainerResponse.ContainerState state = dockerClient.inspectContainerCmd(containerId).exec().getState();
+        boolean oomKilled = Boolean.TRUE.equals(state.getOOMKilled());
+
+        String stderrOutputString = stderrOutputStream.toString();
+
+        boolean timedOut = !completedInTime || exitCode == 124;
+        boolean oom = !timedOut && (oomKilled
+                || exitCode == 137
+                || stderrOutputString.contains("java.lang.OutOfMemoryError"));
+
+        return new ExecResult(
+                exitCode, stdoutOutputStream.toString(), stderrOutputString,
+                timedOut, outputExceeded.get(), oom, durationMs
+        );
     }
 }
