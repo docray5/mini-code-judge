@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -61,13 +60,6 @@ public class SandboxSessionImpl implements SandboxSession {
         String runCodeCommand = String.format(Locale.US, "echo \"$STDIN_B64\" | base64 -d | timeout -k 1s %ds java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", runTestTimeoutSeconds, properties.heapPercentage());
 
         ExecResult result = executeCmd(runCodeCommand, List.of("STDIN_B64=" + inputB64), runTestTimeoutSeconds);
-
-        // TODO remove this later (it needs to be logged in the class calling this method)
-        if (result.exitCode() != 0) {
-            System.out.println("Runtime error:\n" + result.stderr());
-        } else {
-            System.out.println("Output:\n" + result.stdout());
-        }
 
         return new RunTestResult(
                 result.exitCode(), result.stdout, result.stderr,
@@ -137,7 +129,7 @@ public class SandboxSessionImpl implements SandboxSession {
             completedInTime = dockerClient.execStartCmd(exec.getId())
                     .exec(callback)
                     .awaitCompletion(timeoutSeconds + 2L, TimeUnit.SECONDS);
-        } catch (InterruptedException | IOException e) {
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             log.error("Stream closed early or failed: {}", e.getMessage());
