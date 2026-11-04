@@ -24,6 +24,7 @@ public class SandboxSessionImpl implements SandboxSession {
     private final DockerClient dockerClient;
     private final String containerId;
     private final SandboxProperties properties;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     private record ExecResult(
             long exitCode,
@@ -76,10 +77,18 @@ public class SandboxSessionImpl implements SandboxSession {
 
     @Override
     public void close() {
-        dockerClient.removeContainerCmd(containerId)
-                .withForce(true)
-                .withRemoveVolumes(true)
-                .exec();
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+
+        try {
+            dockerClient.removeContainerCmd(containerId)
+                    .withForce(true)
+                    .withRemoveVolumes(true)
+                    .exec();
+        } catch (Exception e) {
+            log.warn("Failed to remove container {}: {}", containerId, e.getMessage());
+        }
     }
 
     /** @return true when bytes were written properly within limit, otherwise false */

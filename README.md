@@ -20,3 +20,4 @@ design decisions:
 
 Known limitations:
 - class name of submitted code must be Main (this can be fixed tho with regex searching the file for class name)
+- single test stdin can be maximum size of 64KB, due to Linux's `MAX_ARG_STRLEN` env variable limits.

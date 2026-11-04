@@ -50,7 +50,16 @@ public class SandboxRunnerImpl implements SandboxRunner {
         try {
             dockerClient.startContainerCmd(containerId).exec();
         } catch (Exception e) {
-            log.error(e.toString());
+            log.error("Failed to start sandbox container {}. Cleaning up...", containerId, e);
+            try {
+                dockerClient.removeContainerCmd(containerId)
+                        .withForce(true)
+                        .withRemoveVolumes(true)
+                        .exec();
+            } catch (Exception cleanupException) {
+                log.error("Failed to force-remove container {} after startup failure", containerId, cleanupException);
+            }
+            throw new IllegalStateException("Failed to start container " + containerId, e);
         }
 
         return new SandboxSessionImpl(dockerClient, containerId, properties);
