@@ -57,14 +57,14 @@ public class SandboxRunnerIntegrationTest {
             assertThat(compile.success()).isTrue();
             assertThat(compile.timedOut()).isFalse();
 
-            RunTestResult run1 = session.runTest("2 3", 1);
+            RunTestResult run1 = session.runTest("2 3", 3);
             assertThat(run1.exitCode()).isZero();
             assertThat(run1.stdout().strip()).isEqualTo("5");
             assertThat(run1.timedOut()).isFalse();
             assertThat(run1.oomKilled()).isFalse();
             assertThat(run1.outputLimitExceeded()).isFalse();
 
-            RunTestResult run2 = session.runTest("100 250", 1);
+            RunTestResult run2 = session.runTest("100 250", 3);
             assertThat(run2.exitCode()).isZero();
             assertThat(run2.stdout().strip()).isEqualTo("350");
         }
@@ -102,7 +102,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(runtimeErrorSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 1);
+            RunTestResult result = session.runTest("", 3);
             assertThat(result.exitCode()).isNotZero();
             assertThat(result.stderr()).contains("ArithmeticException");
             assertThat(result.timedOut()).isFalse();
@@ -147,7 +147,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(oomSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 1);
+            RunTestResult result = session.runTest("", 3);
             assertThat(result.oomKilled()).isTrue();
             assertThat(result.timedOut()).isFalse();
         }
