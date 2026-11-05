@@ -2,8 +2,6 @@ Backend for a mini code judge built with Spring Boot, for a uni project.
 
 WIP
 
-currently in a state of testing how docker-java works
-
 Planned stack: Spring Boot 4, Java 21, Spring Security, PostgreSQL, Flyway, Spring AMQP, docker-java (to start the docker containers from java), JUnit and TestContainers
 
 Planned architecture:
@@ -17,3 +15,7 @@ I want to develop it using microservices architecture and RabbitMQ message broke
 design decisions:
 - No api gateway, since only the submission service will have endpoints
 - Java will be the only supported language for now
+
+Known limitations:
+- class name of submitted code must be Main (this can be fixed tho with regex searching the file for class name)
+- single test stdin can be maximum size of 64KB, due to Linux's `MAX_ARG_STRLEN` env variable limits.
