@@ -2,15 +2,19 @@ package com.bilicki.codejudge.worker.sandbox;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.command.PullImageResultCallback;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.Capability;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.Ulimit;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -19,6 +23,30 @@ public class SandboxRunnerImpl implements SandboxRunner {
 
     private final DockerClient dockerClient;
     private final SandboxProperties properties;
+
+    @PostConstruct
+    protected void initSandboxEnvironment() {
+        String image = properties.image();
+        try {
+            dockerClient.inspectImageCmd(image).exec();
+            log.info("Sandbox image '{}' found locally.", image);
+        } catch (NotFoundException e) {
+            log.info("Sandbox image '{}' not found locally. Pulling from registry...", image);
+            try {
+                boolean pulled = dockerClient.pullImageCmd(image)
+                        .exec(new PullImageResultCallback())
+                        .awaitCompletion(5, TimeUnit.MINUTES);
+
+                if (!pulled) {
+                    throw new IllegalStateException("Timed out pulling sandbox image: " + image);
+                }
+                log.info("Successfully pulled sandbox image '{}'.", image);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while pulling sandbox image: " + image, ie);
+            }
+        }
+    }
 
     @Override
     public SandboxSession openSession() {

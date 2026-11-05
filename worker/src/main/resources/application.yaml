@@ -4,7 +4,7 @@ spring:
 
 sandbox:
   docker-host: ${DOCKER_HOST_URI:unix:///var/run/docker.sock}
-  image: java-sandbox:21
+  image: eclipse-temurin:21-jdk-alpine
   user: "65534:65534"
   label-key: "app.codejudge.sandbox"
   label-value: "true"

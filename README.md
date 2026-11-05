@@ -2,8 +2,6 @@ Backend for a mini code judge built with Spring Boot, for a uni project.
 
 WIP
 
-currently in a state of testing how docker-java works
-
 Planned stack: Spring Boot 4, Java 21, Spring Security, PostgreSQL, Flyway, Spring AMQP, docker-java (to start the docker containers from java), JUnit and TestContainers
 
 Planned architecture:
