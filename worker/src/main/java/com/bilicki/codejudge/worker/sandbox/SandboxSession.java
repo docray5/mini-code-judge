@@ -5,5 +5,5 @@ public interface SandboxSession extends AutoCloseable {
     RunTestResult runTest(String stdin, int runTestTimeoutSeconds);
 
     @Override
-    void close() throws Exception;
+    void close();
 }

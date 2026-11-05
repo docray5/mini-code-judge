@@ -45,11 +45,6 @@ public class SandboxSessionImpl implements SandboxSession {
 
         ExecResult result = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), compileTimeoutSeconds);
 
-        // TODO remove this later (it needs to be logged in the class calling this method)
-        if (result.exitCode() != 0) {
-            log.error("Compilation error:\n{}", result.stderr());
-        }
-
         return new CompileResult(!result.timedOut && result.exitCode == 0, result.timedOut, result.stderr);
     }
 
