@@ -7,6 +7,6 @@ public record JudgeResult(
         Verdict verdict,
         int passedTests,
         int totalTests,
-        long sessionDurationMs,
+        long maxTestDurationMs,
         String errorMessage
 ) { }
