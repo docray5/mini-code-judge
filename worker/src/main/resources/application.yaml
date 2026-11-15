@@ -1,6 +1,16 @@
 spring:
   application:
     name: worker
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+judge:
+  queues:
+    requests: judge.requests
+    results: judge.results
 
 sandbox:
   docker-host: ${DOCKER_HOST_URI:unix:///var/run/docker.sock}
