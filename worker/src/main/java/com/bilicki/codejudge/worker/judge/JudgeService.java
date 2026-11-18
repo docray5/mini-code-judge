@@ -40,7 +40,7 @@ public class JudgeService {
             }
 
             for (TestCasePayload testCase : nonSampleTests) {
-                RunTestResult runTestResult = sandboxSession.runTest(testCase.input(), request.timeLimitPerTestSeconds());
+                RunTestResult runTestResult = sandboxSession.runTest(testCase.input(), request.timeLimitMs());
                 maxTestDurationMs = Math.max(maxTestDurationMs, runTestResult.durationMs());
 
                 Verdict verdict = determineTestVerdict(runTestResult, testCase.expectedOutput());
