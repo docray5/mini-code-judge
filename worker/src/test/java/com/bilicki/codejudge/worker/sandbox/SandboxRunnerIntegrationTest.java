@@ -15,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
         "sandbox.max-output-bytes=4096",
-        "sandbox.cpus=1.0"
+        "sandbox.cpus=1.0",
+        "spring.rabbitmq.listener.simple.auto-startup=false"
 })
 public class SandboxRunnerIntegrationTest {
 
@@ -39,7 +40,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldCompileOnceAndRunMultipleTestCases() throws Exception {
+    public void shouldCompileOnceAndRunMultipleTestCases() {
         String source = """
                 import java.util.Scanner;
                 public class Main {
@@ -71,7 +72,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldReportCompileErrorOnInvalidSyntax() throws Exception {
+    public void shouldReportCompileErrorOnInvalidSyntax() {
         String brokenSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -90,7 +91,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldReportNonZeroExitCodeOnRuntimeException() throws Exception {
+    public void shouldReportNonZeroExitCodeOnRuntimeException() {
         String runtimeErrorSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -111,7 +112,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectTimeLimitExceededOnInfiniteLoop() throws Exception {
+    public void shouldDetectTimeLimitExceededOnInfiniteLoop() {
         String infiniteLoopSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -130,7 +131,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectMemoryLimitExceededOnHeapBomb() throws Exception {
+    public void shouldDetectMemoryLimitExceededOnHeapBomb() {
         String oomSource = """
                 import java.util.ArrayList;
                 import java.util.List;
@@ -154,7 +155,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectOutputLimitExceededOnStdoutBomb() throws Exception {
+    public void shouldDetectOutputLimitExceededOnStdoutBomb() {
         String outputBombSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -176,7 +177,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldContainThreadBombViaPidsLimit() throws Exception {
+    public void shouldContainThreadBombViaPidsLimit() {
         String threadBombSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -198,13 +199,13 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldBlockNetworkAndRootFilesystemWrites() throws Exception {
+    public void shouldBlockNetworkAndRootFilesystemWrites() {
         String adversarialSource = """
                 import java.io.FileWriter;
                 import java.net.InetSocketAddress;
                 import java.net.Socket;
                 public class Main {
-                    public static void main(String[] args) throws Exception {
+                    public static void main(String[] args) {
                         try {
                             new FileWriter("/file.txt").write("pwn");
                             System.out.println("FS_WRITABLE");
@@ -228,6 +229,109 @@ public class SandboxRunnerIntegrationTest {
             RunTestResult result = session.runTest("", 1);
             assertThat(result.exitCode()).isZero();
             assertThat(result.stdout().strip()).isEqualTo("SANDBOX_LOCKED_DOWN");
+        }
+    }
+
+    @Test
+    public void shouldTreatCompilerWarningsAsSuccessfulCompile() {
+        String source = """
+            import java.util.ArrayList;
+            import java.util.List;
+            public class Main {
+                @SuppressWarnings("rawtypes")
+                public static void main(String[] args) {
+                    List raw = new ArrayList();
+                    raw.add("x");
+                    System.out.println(raw.size());
+                }
+            }
+            """;
+
+        try (SandboxSession session = sandboxRunner.openSession()) {
+            CompileResult compile = session.compile(source);
+            assertThat(compile.success()).isTrue();
+            assertThat(compile.stderr()).contains("unchecked");
+
+            RunTestResult run = session.runTest("", 3);
+            assertThat(run.stdout().strip()).isEqualTo("1");
+        }
+    }
+
+    @Test
+    public void shouldReportExplicitExitCodeAsRuntimeErrorNotOom() {
+        String source = """
+            public class Main {
+                public static void main(String[] args) {
+                    System.exit(3);
+                }
+            }
+            """;
+
+        try (SandboxSession session = sandboxRunner.openSession()) {
+            assertThat(session.compile(source).success()).isTrue();
+
+            RunTestResult result = session.runTest("", 3);
+            assertThat(result.exitCode()).isEqualTo(3);
+            assertThat(result.oomKilled()).isFalse();
+            assertThat(result.timedOut()).isFalse();
+        }
+    }
+
+    @Test
+    public void shouldDetectMemoryLimitExceededOnNativeMemoryBomb() {
+        String source = """
+            import java.nio.ByteBuffer;
+            import java.util.ArrayList;
+            import java.util.List;
+            public class Main {
+                public static void main(String[] args) {
+                    List<ByteBuffer> buffers = new ArrayList<>();
+                    while (true) {
+                        buffers.add(ByteBuffer.allocateDirect(1024 * 1024));
+                    }
+                }
+            }
+            """;
+
+        try (SandboxSession session = sandboxRunner.openSession()) {
+            assertThat(session.compile(source).success()).isTrue();
+
+            RunTestResult result = session.runTest("", 5);
+            System.out.printf("native bomb -> exit=%d oom=%b timedOut=%b stderr=%s%n",
+                    result.exitCode(), result.oomKilled(), result.timedOut(), result.stderr());
+
+            assertThat(result.oomKilled()).isTrue();
+            assertThat(result.timedOut()).isFalse();
+        }
+    }
+
+    @Test
+    public void shouldNotReadPrivilegedFilesOrSeeDockerSocket() {
+        String source = """
+            import java.nio.file.Files;
+            import java.nio.file.Path;
+            public class Main {
+                public static void main(String[] args) {
+                    try {
+                        Files.readString(Path.of("/etc/shadow"));
+                        System.out.println("SHADOW_READABLE");
+                        return;
+                    } catch (Exception expected) {}
+
+                    if (Files.exists(Path.of("/var/run/docker.sock")) || Files.exists(Path.of("/run/docker.sock"))) {
+                        System.out.println("DOCKER_SOCKET_VISIBLE");
+                        return;
+                    }
+                    System.out.println("NO_HOST_ACCESS");
+                }
+            }
+            """;
+
+        try (SandboxSession session = sandboxRunner.openSession()) {
+            assertThat(session.compile(source).success()).isTrue();
+
+            RunTestResult result = session.runTest("", 3);
+            assertThat(result.stdout().strip()).isEqualTo("NO_HOST_ACCESS");
         }
     }
 }

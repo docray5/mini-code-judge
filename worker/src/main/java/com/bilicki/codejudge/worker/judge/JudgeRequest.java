@@ -6,6 +6,6 @@ import java.util.UUID;
 public record JudgeRequest (
         UUID submissionId,
         String sourceCode,
-        int timeLimitPerTestSeconds,
+        int timeLimitSeconds,
         List<TestCasePayload> testCases
 ) { }
