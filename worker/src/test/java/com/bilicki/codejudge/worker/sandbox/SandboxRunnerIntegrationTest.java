@@ -15,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
         "sandbox.max-output-bytes=4096",
-        "sandbox.cpus=1.0"
+        "sandbox.cpus=1.0",
+        "spring.rabbitmq.listener.simple.auto-startup=false"
 })
 public class SandboxRunnerIntegrationTest {
 
