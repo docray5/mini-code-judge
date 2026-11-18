@@ -19,7 +19,7 @@ public class JudgeRequestListener {
         try {
             result = judgeService.evaluate(judgeRequest);
         } catch (Exception e) {
-            log.error("Unhandled error while evaluating submission {}", judgeRequest.submissionId());
+            log.error("Unhandled error while evaluating submission {}", judgeRequest.submissionId(), e);
             result = new JudgeResult(
                     judgeRequest.submissionId(),
                     Verdict.INTERNAL_ERROR,
