@@ -40,7 +40,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldCompileOnceAndRunMultipleTestCases() throws Exception {
+    public void shouldCompileOnceAndRunMultipleTestCases() {
         String source = """
                 import java.util.Scanner;
                 public class Main {
@@ -72,7 +72,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldReportCompileErrorOnInvalidSyntax() throws Exception {
+    public void shouldReportCompileErrorOnInvalidSyntax() {
         String brokenSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -91,7 +91,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldReportNonZeroExitCodeOnRuntimeException() throws Exception {
+    public void shouldReportNonZeroExitCodeOnRuntimeException() {
         String runtimeErrorSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -112,7 +112,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectTimeLimitExceededOnInfiniteLoop() throws Exception {
+    public void shouldDetectTimeLimitExceededOnInfiniteLoop() {
         String infiniteLoopSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -131,7 +131,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectMemoryLimitExceededOnHeapBomb() throws Exception {
+    public void shouldDetectMemoryLimitExceededOnHeapBomb() {
         String oomSource = """
                 import java.util.ArrayList;
                 import java.util.List;
@@ -155,7 +155,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectOutputLimitExceededOnStdoutBomb() throws Exception {
+    public void shouldDetectOutputLimitExceededOnStdoutBomb() {
         String outputBombSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -177,7 +177,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldContainThreadBombViaPidsLimit() throws Exception {
+    public void shouldContainThreadBombViaPidsLimit() {
         String threadBombSource = """
                 public class Main {
                     public static void main(String[] args) {
@@ -199,13 +199,13 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldBlockNetworkAndRootFilesystemWrites() throws Exception {
+    public void shouldBlockNetworkAndRootFilesystemWrites() {
         String adversarialSource = """
                 import java.io.FileWriter;
                 import java.net.InetSocketAddress;
                 import java.net.Socket;
                 public class Main {
-                    public static void main(String[] args) throws Exception {
+                    public static void main(String[] args) {
                         try {
                             new FileWriter("/file.txt").write("pwn");
                             System.out.println("FS_WRITABLE");
@@ -233,7 +233,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldTreatCompilerWarningsAsSuccessfulCompile() throws Exception {
+    public void shouldTreatCompilerWarningsAsSuccessfulCompile() {
         String source = """
             import java.util.ArrayList;
             import java.util.List;
@@ -258,7 +258,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldReportExplicitExitCodeAsRuntimeErrorNotOom() throws Exception {
+    public void shouldReportExplicitExitCodeAsRuntimeErrorNotOom() {
         String source = """
             public class Main {
                 public static void main(String[] args) {
@@ -278,7 +278,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldDetectMemoryLimitExceededOnNativeMemoryBomb() throws Exception {
+    public void shouldDetectMemoryLimitExceededOnNativeMemoryBomb() {
         String source = """
             import java.nio.ByteBuffer;
             import java.util.ArrayList;
@@ -306,7 +306,7 @@ public class SandboxRunnerIntegrationTest {
     }
 
     @Test
-    public void shouldNotReadPrivilegedFilesOrSeeDockerSocket() throws Exception {
+    public void shouldNotReadPrivilegedFilesOrSeeDockerSocket() {
         String source = """
             import java.nio.file.Files;
             import java.nio.file.Path;
