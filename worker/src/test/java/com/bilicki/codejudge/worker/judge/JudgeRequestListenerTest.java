@@ -29,7 +29,7 @@ public class JudgeRequestListenerTest {
     @Test
     public void shouldEvaluateRequestAndPublishResult() {
         UUID submissionId = UUID.randomUUID();
-        JudgeRequest request = new JudgeRequest(submissionId, "code", 1, List.of());
+        JudgeRequest request = new JudgeRequest(submissionId, "code", 1000, List.of());
         JudgeResult expectedResult = new JudgeResult(submissionId, Verdict.ACCEPTED, 1, 1, 50L, null);
 
         when(judgeService.evaluate(request)).thenReturn(expectedResult);
@@ -42,7 +42,7 @@ public class JudgeRequestListenerTest {
     @Test
     public void shouldPublishInternalErrorWhenJudgeServiceThrowsUnexpectedException() {
         UUID submissionId = UUID.randomUUID();
-        JudgeRequest request = new JudgeRequest(submissionId, "code", 1, List.of());
+        JudgeRequest request = new JudgeRequest(submissionId, "code", 1000, List.of());
 
         when(judgeService.evaluate(request)).thenThrow(new RuntimeException("Unexpected crash"));
 
