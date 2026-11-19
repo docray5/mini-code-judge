@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: submission
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/code-judge-db}
+    username: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD:admin}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    listener:
+      simple:
+        prefetch: 1
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+judge:
+  queues:
+    requests: judge.requests
+    results: judge.results
