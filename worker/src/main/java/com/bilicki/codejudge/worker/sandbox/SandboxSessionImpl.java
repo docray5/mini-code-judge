@@ -40,21 +40,23 @@ public class SandboxSessionImpl implements SandboxSession {
         String base64Code = Base64.getEncoder().encodeToString(javaSourceCode.getBytes(StandardCharsets.UTF_8));
 
         int compileTimeoutSeconds = (int) properties.compileTimeout().toSeconds();
+        long compileTimeoutMs = properties.compileTimeout().toMillis();
 
         String compileCodeCommand = String.format("echo \"$CODE_B64\" | base64 -d > /tmp/Main.java && timeout -k 1s %ds javac -d /tmp /tmp/Main.java", compileTimeoutSeconds);
 
-        ExecResult result = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), compileTimeoutSeconds);
+        ExecResult result = executeCmd(compileCodeCommand, List.of("CODE_B64="+base64Code), compileTimeoutMs);
 
         return new CompileResult(!result.timedOut && result.exitCode == 0, result.timedOut, result.stderr);
     }
 
     @Override
-    public RunTestResult runTest(String stdin, int runTestTimeoutSeconds) {
-        String inputB64 = Base64.getEncoder().encodeToString(stdin.getBytes());
+    public RunTestResult runTest(String stdin, int runTestTimeoutMs) {
+        String inputB64 = Base64.getEncoder().encodeToString(stdin.getBytes(StandardCharsets.UTF_8));
+        float runTestTimeoutSeconds = runTestTimeoutMs / 1000f;
 
-        String runCodeCommand = String.format(Locale.US, "echo \"$STDIN_B64\" | base64 -d | timeout -k 1s %ds java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", runTestTimeoutSeconds, properties.heapPercentage());
+        String runCodeCommand = String.format(Locale.US, "echo \"$STDIN_B64\" | base64 -d | timeout -k 1s %.3f java -XX:MaxRAMPercentage=%.1f -XX:+UseSerialGC -XX:-UsePerfData -cp /tmp Main", runTestTimeoutSeconds, properties.heapPercentage());
 
-        ExecResult result = executeCmd(runCodeCommand, List.of("STDIN_B64=" + inputB64), runTestTimeoutSeconds);
+        ExecResult result = executeCmd(runCodeCommand, List.of("STDIN_B64=" + inputB64), runTestTimeoutMs);
 
         return new RunTestResult(
                 result.exitCode(), result.stdout, result.stderr,
@@ -91,7 +93,7 @@ public class SandboxSessionImpl implements SandboxSession {
         return true;
     }
 
-    private ExecResult executeCmd(String command, List<String> env, int timeoutSeconds) {
+    private ExecResult executeCmd(String command, List<String> env, long timeoutMs) {
         ExecCreateCmdResponse exec = dockerClient.execCreateCmd(containerId)
                 .withAttachStderr(true)
                 .withAttachStdout(true)
@@ -123,7 +125,7 @@ public class SandboxSessionImpl implements SandboxSession {
         }) {
             completedInTime = dockerClient.execStartCmd(exec.getId())
                     .exec(callback)
-                    .awaitCompletion(timeoutSeconds + 2L, TimeUnit.SECONDS);
+                    .awaitCompletion(timeoutMs + 2000L, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {

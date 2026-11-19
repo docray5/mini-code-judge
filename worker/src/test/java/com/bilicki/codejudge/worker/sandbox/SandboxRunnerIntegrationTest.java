@@ -58,14 +58,14 @@ public class SandboxRunnerIntegrationTest {
             assertThat(compile.success()).isTrue();
             assertThat(compile.timedOut()).isFalse();
 
-            RunTestResult run1 = session.runTest("2 3", 3);
+            RunTestResult run1 = session.runTest("2 3", 3000);
             assertThat(run1.exitCode()).isZero();
             assertThat(run1.stdout().strip()).isEqualTo("5");
             assertThat(run1.timedOut()).isFalse();
             assertThat(run1.oomKilled()).isFalse();
             assertThat(run1.outputLimitExceeded()).isFalse();
 
-            RunTestResult run2 = session.runTest("100 250", 3);
+            RunTestResult run2 = session.runTest("100 250", 3000);
             assertThat(run2.exitCode()).isZero();
             assertThat(run2.stdout().strip()).isEqualTo("350");
         }
@@ -103,7 +103,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(runtimeErrorSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 3);
+            RunTestResult result = session.runTest("", 3000);
             assertThat(result.exitCode()).isNotZero();
             assertThat(result.stderr()).contains("ArithmeticException");
             assertThat(result.timedOut()).isFalse();
@@ -124,7 +124,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(infiniteLoopSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 1);
+            RunTestResult result = session.runTest("", 1000);
             assertThat(result.timedOut()).isTrue();
             assertThat(result.oomKilled()).isFalse();
         }
@@ -148,7 +148,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(oomSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 3);
+            RunTestResult result = session.runTest("", 3000);
             assertThat(result.oomKilled()).isTrue();
             assertThat(result.timedOut()).isFalse();
         }
@@ -170,7 +170,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(outputBombSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 1);
+            RunTestResult result = session.runTest("", 1000);
             assertThat(result.outputLimitExceeded()).isTrue();
             assertThat(result.stdout().getBytes(StandardCharsets.UTF_8).length).isEqualTo(properties.maxOutputBytes());
         }
@@ -193,7 +193,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(threadBombSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 1);
+            RunTestResult result = session.runTest("", 1000);
             assertThat(result.exitCode()).isNotZero();
         }
     }
@@ -226,7 +226,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(adversarialSource).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 1);
+            RunTestResult result = session.runTest("", 1000);
             assertThat(result.exitCode()).isZero();
             assertThat(result.stdout().strip()).isEqualTo("SANDBOX_LOCKED_DOWN");
         }
@@ -252,7 +252,7 @@ public class SandboxRunnerIntegrationTest {
             assertThat(compile.success()).isTrue();
             assertThat(compile.stderr()).contains("unchecked");
 
-            RunTestResult run = session.runTest("", 3);
+            RunTestResult run = session.runTest("", 3000);
             assertThat(run.stdout().strip()).isEqualTo("1");
         }
     }
@@ -270,7 +270,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(source).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 3);
+            RunTestResult result = session.runTest("", 3000);
             assertThat(result.exitCode()).isEqualTo(3);
             assertThat(result.oomKilled()).isFalse();
             assertThat(result.timedOut()).isFalse();
@@ -296,7 +296,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(source).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 5);
+            RunTestResult result = session.runTest("", 5000);
             System.out.printf("native bomb -> exit=%d oom=%b timedOut=%b stderr=%s%n",
                     result.exitCode(), result.oomKilled(), result.timedOut(), result.stderr());
 
@@ -330,7 +330,7 @@ public class SandboxRunnerIntegrationTest {
         try (SandboxSession session = sandboxRunner.openSession()) {
             assertThat(session.compile(source).success()).isTrue();
 
-            RunTestResult result = session.runTest("", 3);
+            RunTestResult result = session.runTest("", 3000);
             assertThat(result.stdout().strip()).isEqualTo("NO_HOST_ACCESS");
         }
     }

@@ -19,10 +19,18 @@ public class JudgeService {
     private final OutputComparator outputComparator;
 
     public JudgeResult evaluate(JudgeRequest request) {
+        if (request.timeLimitMs() <= 0) {
+            return new JudgeResult(request.submissionId(), Verdict.INTERNAL_ERROR, 0, 0, 0L, "Timeout for tests must be positive");
+        }
+
         List<TestCasePayload> nonSampleTests = request.testCases().stream()
                 .filter(tc -> !tc.isSample()).toList();
 
         int totalTests = nonSampleTests.size();
+
+        if (totalTests == 0) {
+            return new JudgeResult(request.submissionId(), Verdict.INTERNAL_ERROR, 0, totalTests, 0L, "No tests were provided");
+        }
 
         try (SandboxSession sandboxSession = sandboxRunner.openSession()) {
 
@@ -40,7 +48,7 @@ public class JudgeService {
             }
 
             for (TestCasePayload testCase : nonSampleTests) {
-                RunTestResult runTestResult = sandboxSession.runTest(testCase.input(), request.timeLimitSeconds());
+                RunTestResult runTestResult = sandboxSession.runTest(testCase.input(), request.timeLimitMs());
                 maxTestDurationMs = Math.max(maxTestDurationMs, runTestResult.durationMs());
 
                 Verdict verdict = determineTestVerdict(runTestResult, testCase.expectedOutput());

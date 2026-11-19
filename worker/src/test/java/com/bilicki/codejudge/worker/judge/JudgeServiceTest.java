@@ -37,7 +37,7 @@ public class JudgeServiceTest {
         when(sandboxSession.compile(any(String.class))).thenReturn(new CompileResult(false, false, "Compile error"));
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "bad code", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "bad code", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "1 2", "3", false))));
 
         verify(sandboxSession, never()).runTest(anyString(), anyInt());
@@ -57,7 +57,7 @@ public class JudgeServiceTest {
         when(sandboxSession.compile(any(String.class))).thenReturn(new CompileResult(false, true, "timeout"));
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "some while loop", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "some while loop", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "1 2", "3", false))));
 
         verify(sandboxSession, never()).runTest(anyString(), anyInt());
@@ -77,7 +77,7 @@ public class JudgeServiceTest {
         when(sandboxSession.compile(any(String.class))).thenThrow(new RuntimeException());
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "bad code", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "bad code", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "1 2", "3", false))));
 
         verify(sandboxSession, never()).runTest(anyString(), anyInt());
@@ -95,9 +95,9 @@ public class JudgeServiceTest {
         when(sandboxRunner.openSession()).thenReturn(sandboxSession);
         when(sandboxSession.compile(anyString())).thenReturn(new CompileResult(true, false, ""));
 
-        when(sandboxSession.runTest(eq("1 2"), eq(2)))
+        when(sandboxSession.runTest(eq("1 2"), eq(2000)))
                 .thenReturn(new RunTestResult(0L, "3\n", "", false, false, false, 120L));
-        when(sandboxSession.runTest(eq("10 20"), eq(2)))
+        when(sandboxSession.runTest(eq("10 20"), eq(2000)))
                 .thenReturn(new RunTestResult(0L, "30   \r\n", "", false, false, false, 250L));
 
         UUID submissionId = UUID.randomUUID();
@@ -106,9 +106,9 @@ public class JudgeServiceTest {
                 new TestCasePayload(UUID.randomUUID(), "10 20", "30", false)
         );
 
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "valid code", 2, tests));
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "valid code", 2000, tests));
 
-        verify(sandboxSession, times(2)).runTest(anyString(), eq(2));
+        verify(sandboxSession, times(2)).runTest(anyString(), eq(2000));
         verify(sandboxSession).close();
 
         assertThat(judgeResult.submissionId()).isEqualTo(submissionId);
@@ -122,7 +122,7 @@ public class JudgeServiceTest {
     public void shouldFilterOutSampleTestsAndOnlyRunHiddenTests() {
         when(sandboxRunner.openSession()).thenReturn(sandboxSession);
         when(sandboxSession.compile(anyString())).thenReturn(new CompileResult(true, false, ""));
-        when(sandboxSession.runTest(eq("5 5"), eq(1)))
+        when(sandboxSession.runTest(eq("5 5"), eq(1000)))
                 .thenReturn(new RunTestResult(0L, "10\n", "", false, false, false, 100L));
 
         UUID submissionId = UUID.randomUUID();
@@ -131,10 +131,10 @@ public class JudgeServiceTest {
                 new TestCasePayload(UUID.randomUUID(), "5 5", "10", false)
         );
 
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "valid code", 1, tests));
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "valid code", 1000, tests));
 
         verify(sandboxSession, never()).runTest(eq("1 1"), anyInt());
-        verify(sandboxSession, times(1)).runTest(eq("5 5"), eq(1));
+        verify(sandboxSession, times(1)).runTest(eq("5 5"), eq(1000));
         verify(sandboxSession).close();
 
         assertThat(judgeResult.verdict()).isEqualTo(Verdict.ACCEPTED);
@@ -147,9 +147,9 @@ public class JudgeServiceTest {
         when(sandboxRunner.openSession()).thenReturn(sandboxSession);
         when(sandboxSession.compile(anyString())).thenReturn(new CompileResult(true, false, ""));
 
-        when(sandboxSession.runTest(eq("1 2"), eq(1)))
+        when(sandboxSession.runTest(eq("1 2"), eq(1000)))
                 .thenReturn(new RunTestResult(0L, "3\n", "", false, false, false, 100L));
-        when(sandboxSession.runTest(eq("2 2"), eq(1)))
+        when(sandboxSession.runTest(eq("2 2"), eq(1000)))
                 .thenReturn(new RunTestResult(0L, "5\n", "", false, false, false, 110L));
 
         UUID submissionId = UUID.randomUUID();
@@ -159,9 +159,9 @@ public class JudgeServiceTest {
                 new TestCasePayload(UUID.randomUUID(), "3 3", "6", false)
         );
 
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "code", 1, tests));
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "code", 1000, tests));
 
-        verify(sandboxSession, times(2)).runTest(anyString(), eq(1));
+        verify(sandboxSession, times(2)).runTest(anyString(), eq(1000));
         verify(sandboxSession, never()).runTest(eq("3 3"), anyInt());
         verify(sandboxSession).close();
 
@@ -179,7 +179,7 @@ public class JudgeServiceTest {
                 .thenReturn(new RunTestResult(1L, "", "Exception in thread \"main\" java.lang.ArithmeticException", false, false, false, 90L));
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "code", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "code", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "1 0", "0", false))));
 
         verify(sandboxSession).close();
@@ -198,7 +198,7 @@ public class JudgeServiceTest {
                 .thenReturn(new RunTestResult(124L, "", "", true, false, false, 1000L));
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "while(true)", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "while(true)", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "", "ok", false))));
 
         verify(sandboxSession).close();
@@ -216,7 +216,7 @@ public class JudgeServiceTest {
                 .thenReturn(new RunTestResult(137L, "", "java.lang.OutOfMemoryError", false, false, true, 300L));
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "oom code", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "oom code", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "", "ok", false))));
 
         verify(sandboxSession).close();
@@ -234,7 +234,7 @@ public class JudgeServiceTest {
                 .thenReturn(new RunTestResult(0L, "truncated...", "", false, true, false, 150L));
 
         UUID submissionId = UUID.randomUUID();
-        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "stdout bomb", 1,
+        JudgeResult judgeResult = judgeService.evaluate(new JudgeRequest(submissionId, "stdout bomb", 1000,
                 List.of(new TestCasePayload(UUID.randomUUID(), "", "ok", false))));
 
         verify(sandboxSession).close();
