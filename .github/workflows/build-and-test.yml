@@ -10,9 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  worker-tests:
+  worker:
+    name: Worker Tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -23,8 +23,27 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
-          cache-dependency-path: '**/pom.xml'
+          cache-dependency-path: 'worker/pom.xml'
 
       - name: Build and Test Worker
         working-directory: ./worker
+        run: ./mvnw -B verify
+
+  submission:
+    name: Submission Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+          cache-dependency-path: 'submission/pom.xml'
+
+      - name: Build and Test Submission
+        working-directory: ./submission
         run: ./mvnw -B verify
